@@ -12,6 +12,7 @@ from clipforge.util import (
     WorkDir,
     duration_of,
     escape_drawtext,
+    escape_filter_path,
     find_font,
     format_timestamp,
     probe,
@@ -99,7 +100,7 @@ def render_clip(
     dur = min(float(duration), max(0.1, src_duration - start), 59.95)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    font_path = find_font(font)
+    font_path = escape_filter_path(find_font(font))
     title_text = escape_drawtext(title or "HIGHLIGHT")
 
     # Blurred 9:16 background; foreground scaled to width so a side facecam stays in frame.

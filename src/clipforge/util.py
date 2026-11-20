@@ -208,6 +208,12 @@ def escape_drawtext(text: str) -> str:
     )
 
 
+def escape_filter_path(path: str | Path) -> str:
+    """Quote and escape a path for use as an ffmpeg filtergraph option value (e.g. fontfile)."""
+    text = str(path).replace("\\", "/").replace("'", r"\'").replace(":", r"\:")
+    return f"'{text}'"
+
+
 @dataclass
 class WorkDir:
     """Standard per-video layout under an output root."""
