@@ -24,6 +24,7 @@ from clipforge.util import (
     WorkDir,
     clamp_clip_duration,
     is_url,
+    read_json,
 )
 
 log = logging.getLogger("clipforge")
@@ -109,6 +110,7 @@ def ingest_project(
     *,
     video_id: str | None = None,
     write_comments: bool = True,
+    max_duration_s: float | None = None,
     ctx: JobContext | None = None,
 ) -> WorkDir:
     """Ingest a URL or local file and prepare analysis artifacts."""
@@ -120,6 +122,7 @@ def ingest_project(
         Path(work_root),
         video_id=video_id,
         write_comments=write_comments,
+        max_duration_s=max_duration_s,
     )
     ctx.check_cancelled()
     ctx.update(0.85, "Preparing audio features")
@@ -171,6 +174,8 @@ def render_project(
     crf: int = 19,
     preset: str = "medium",
     src_files: list[dict[str, Any]] | None = None,
+    fallback_source: Path | None = None,
+    merge_manifest: bool = False,
     ctx: JobContext | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Render selected moments and update the manifest."""
@@ -196,11 +201,25 @@ def render_project(
         crf=crf,
         preset=preset,
         src_files=src_files,
+        fallback_source=fallback_source,
         on_progress=_progress,
         cancel_check=ctx.check_cancelled,
     )
     ctx.check_cancelled()
     manifest = build_manifest(work, moments, renders)
+    if merge_manifest and work.manifest.is_file():
+        try:
+            existing = read_json(work.manifest)
+        except (OSError, ValueError):
+            existing = {}
+        old_clips = existing.get("clips") or []
+        new_by_id = {str(clip.get("id")): clip for clip in manifest.get("clips") or []}
+        merged = []
+        for clip in old_clips:
+            clip_id = str(clip.get("id"))
+            merged.append(new_by_id.pop(clip_id, clip))
+        merged.extend(new_by_id.values())
+        manifest["clips"] = merged
     write_manifest(work, manifest)
     ctx.update(1.0, f"Rendered {len(renders)}/{total} clip(s)")
     return renders, manifest

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
+import threading
 from pathlib import Path
 
 from clipforge import __version__
@@ -54,6 +54,24 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"clipforge {__version__}")
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    serve_p = sub.add_parser("serve", help="Run the web app and background worker")
+    serve_p.add_argument("--host", default="127.0.0.1")
+    serve_p.add_argument("--port", type=int, default=8000)
+    serve_p.add_argument("--reload", action="store_true")
+    serve_p.add_argument("--no-worker", action="store_true", help="Run only the web server")
+    serve_p.set_defaults(func=cmd_serve)
+
+    worker_p = sub.add_parser("worker", help="Run the background media/upload worker")
+    worker_p.add_argument("--queue", choices=["media", "upload", "all"], default="all")
+    worker_p.set_defaults(func=cmd_worker)
+
+    user_p = sub.add_parser("user", help="Manage web accounts")
+    user_sub = user_p.add_subparsers(dest="user_command", required=True)
+    admin_p = user_sub.add_parser("create-admin", help="Create or promote an admin account")
+    admin_p.add_argument("email")
+    admin_p.add_argument("--password", help="Password (prompted when omitted)")
+    admin_p.set_defaults(func=cmd_create_admin)
 
     run_p = sub.add_parser("run", help="Full pipeline: ingest → detect → render → manifest")
     run_p.add_argument("source", help="YouTube URL or path to a local video file")
@@ -289,6 +307,71 @@ def cmd_upload(args: argparse.Namespace) -> int:
     )
     for rec in results:
         print(f"{rec.get('clip_id')}: {rec.get('youtube_url') or rec}")
+    return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise ClipForgeError(
+            "Web dependencies are not installed. Run: pip install -e '.[web]'"
+        ) from exc
+    if not args.no_worker:
+        from clipforge.worker import run_worker
+
+        threading.Thread(
+            target=run_worker,
+            args=("all",),
+            daemon=True,
+            name="clipforge-worker",
+        ).start()
+    uvicorn.run(
+        "clipforge.api.main:app",
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+    )
+    return 0
+
+
+def cmd_worker(args: argparse.Namespace) -> int:
+    from clipforge.worker import run_worker
+
+    run_worker(args.queue)
+    return 0
+
+
+def cmd_create_admin(args: argparse.Namespace) -> int:
+    import getpass
+
+    from sqlalchemy import select
+
+    from clipforge.config import Settings
+    from clipforge.db import Database
+    from clipforge.models import User
+    from clipforge.security import hash_password
+
+    settings = Settings()
+    settings.ensure_dirs()
+    db = Database(settings.resolved_database_url)
+    db.create_all()
+    email = args.email.strip().lower()
+    password = args.password or getpass.getpass("Password: ")
+    if len(password) < 10:
+        raise ClipForgeError("Password must be at least 10 characters")
+    with db.session() as session:
+        user = session.execute(select(User).where(User.email == email)).scalars().first()
+        if user is None:
+            session.add(User(email=email, password_hash=hash_password(password), role="admin"))
+            action = "created"
+        else:
+            user.role = "admin"
+            user.password_hash = hash_password(password)
+            user.is_active = True
+            action = "updated"
+        session.commit()
+    print(f"Admin {action}: {email}")
     return 0
 
 

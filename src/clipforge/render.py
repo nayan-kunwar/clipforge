@@ -53,11 +53,15 @@ def render_moments(
         src, ss = _resolve_source(moment, src_files, source_default)
         out = work.shorts / f"{moment['id']}.mp4"
         thumb = work.thumbs / f"{moment['id']}.jpg"
+        duration = float(
+            moment.get("duration")
+            or (float(moment.get("end", moment["start"])) - float(moment["start"]))
+        )
         rec = render_clip(
             src,
             out,
             start=ss,
-            duration=float(moment["duration"]),
+            duration=duration,
             title=str(moment.get("title") or "HIGHLIGHT"),
             thumb=thumb,
             font=font_path,

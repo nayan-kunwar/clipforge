@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from clipforge.util import ClipForgeError, WorkDir, read_json, write_json
 
@@ -94,6 +94,7 @@ def upload_video(
     tags: list[str] | None = None,
     privacy: str = DEFAULT_PRIVACY,
     category_id: str = "22",
+    on_progress: Callable[[float], None] | None = None,
 ) -> dict[str, Any]:
     privacy = (privacy or DEFAULT_PRIVACY).lower()
     if privacy not in VALID_PRIVACY:
@@ -124,6 +125,8 @@ def upload_video(
         status, response = request.next_chunk()
         if status:
             log.info("  upload progress %.0f%%", status.progress() * 100)
+            if on_progress is not None:
+                on_progress(float(status.progress()))
     return response
 
 

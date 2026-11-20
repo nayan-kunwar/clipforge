@@ -46,6 +46,7 @@ def ingest(
     *,
     video_id: str | None = None,
     write_comments: bool = True,
+    max_duration_s: float | None = None,
 ) -> WorkDir:
     """Download or import a source into a standard work directory."""
     require_bin("ffmpeg")
@@ -54,7 +55,13 @@ def ingest(
         return _ingest_local(Path(source), work_root, video_id=video_id)
     if is_url(source) or extract_video_id(source):
         require_bin("yt-dlp")
-        return _ingest_url(source, work_root, video_id=video_id, write_comments=write_comments)
+        return _ingest_url(
+            source,
+            work_root,
+            video_id=video_id,
+            write_comments=write_comments,
+            max_duration_s=max_duration_s,
+        )
     raise ClipForgeError(
         f"Source is not a local file or a recognized URL: {source}"
     )
@@ -181,6 +188,7 @@ def _ingest_url(
     *,
     video_id: str | None = None,
     write_comments: bool = True,
+    max_duration_s: float | None = None,
 ) -> WorkDir:
     vid = video_id or extract_video_id(url)
     meta = _fetch_metadata(url, write_comments=write_comments)
@@ -189,6 +197,11 @@ def _ingest_url(
     comments = meta.pop("comments", None) or []
     meta["video_id"] = vid
     meta["duration_s"] = _coerce_duration(meta)
+    if max_duration_s and meta["duration_s"] > max_duration_s:
+        raise ClipForgeError(
+            f"Source is longer than the {max_duration_s / 3600:g} hour limit "
+            f"({meta['duration_s'] / 3600:.2f} hours)"
+        )
     meta["source_type"] = "youtube"
     meta["webpage_url"] = meta.get("webpage_url") or meta.get("original_url") or url
     write_json(work.metadata, meta)
