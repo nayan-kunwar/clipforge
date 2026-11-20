@@ -104,11 +104,11 @@ pip install -e ".[web]"          # FastAPI web UI
 pip install -e ".[all]"
 ```
 
-Or with Docker (core tools only; pass `--build-arg EXTRAS=[all]` for extras):
+Or build the deployment image (web UI + workers; add `,transcribe` to `EXTRAS` for transcript cues):
 
 ```bash
 docker build -t clipforge .
-docker run --rm -v "$PWD:/data" clipforge --help
+docker run --rm clipforge clipforge --help
 ```
 
 ## Web UI (self-hosted)

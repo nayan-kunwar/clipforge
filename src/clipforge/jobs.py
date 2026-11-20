@@ -25,6 +25,15 @@ def create_job(
     payload: dict[str, Any] | None = None,
     max_attempts: int = 2,
 ) -> Job:
+    if kind != "upload":
+        active = db.execute(
+            select(Job).where(
+                Job.user_id == user_id,
+                Job.status.in_(ACTIVE_STATUSES),
+            )
+        ).scalars().all()
+        if len(active) >= 2:
+            raise ClipForgeError("You already have two active jobs; wait for one to finish")
     if project_id and kind != "upload":
         existing = db.execute(
             select(Job).where(
@@ -102,7 +111,6 @@ def requeue_expired(db: Session) -> int:
             progress=0.0,
             lease_until=None,
             started_at=None,
-            cancel_requested=False,
         )
     )
     db.commit()
