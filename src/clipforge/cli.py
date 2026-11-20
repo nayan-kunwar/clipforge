@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 import threading
 from pathlib import Path
 
@@ -30,6 +31,11 @@ log = logging.getLogger("clipforge")
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass
     parser = _build_parser()
     args = parser.parse_args(argv)
     _setup_logging(verbose=getattr(args, "verbose", False))

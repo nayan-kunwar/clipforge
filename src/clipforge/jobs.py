@@ -87,6 +87,28 @@ def heartbeat(db: Session, job_id: str, *, seconds: int = 60) -> None:
     db.commit()
 
 
+def requeue_expired(db: Session) -> int:
+    """Requeue jobs whose worker lease expired (e.g. after a crash)."""
+    result = db.execute(
+        update(Job)
+        .where(
+            Job.status == "running",
+            Job.lease_until.is_not(None),
+            Job.lease_until < utcnow(),
+        )
+        .values(
+            status="queued",
+            stage="requeued",
+            progress=0.0,
+            lease_until=None,
+            started_at=None,
+            cancel_requested=False,
+        )
+    )
+    db.commit()
+    return int(result.rowcount or 0)
+
+
 def set_status(
     db: Session,
     job_id: str,
@@ -239,6 +261,7 @@ __all__ = [
     "heartbeat",
     "job_payload",
     "request_cancel",
+    "requeue_expired",
     "retry_job",
     "sanitize_error",
     "set_status",

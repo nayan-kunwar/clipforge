@@ -22,6 +22,7 @@ from clipforge.deps import (
 )
 from clipforge.emailer import send_password_reset_email
 from clipforge.models import AuthSession, Invite, OAuthToken, PasswordReset, User, utcnow
+from clipforge.quota import quota_status
 from clipforge.schemas import ChangePasswordIn, ForgotPasswordIn, InviteAcceptIn, LoginIn, ResetPasswordIn
 from clipforge.security import (
     clear_rate_limit,
@@ -90,6 +91,7 @@ def _user_payload(db: Session, user: User, settings: Settings, session: AuthSess
             "channel_id": google.channel_id if google else None,
             "status": google.status if google else None,
         },
+        "upload_quota": quota_status(db, settings, user),
     }
 
 

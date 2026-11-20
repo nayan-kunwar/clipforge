@@ -18,11 +18,23 @@ export interface GoogleStatus {
   status: string | null;
 }
 
+export interface UploadQuota {
+  date_pacific: string;
+  units_used: number;
+  units_limit: number;
+  uploads_used: number;
+  uploads_limit: number;
+  user_units_used: number;
+  user_uploads_limit: number;
+  estimated_uploads_left: number;
+}
+
 export interface AuthPayload {
   user: User;
   csrf: string;
   quota: Quota;
   google: GoogleStatus;
+  upload_quota: UploadQuota;
 }
 
 export interface Project {

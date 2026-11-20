@@ -19,6 +19,7 @@ from clipforge.db import Database
 from clipforge.models import User
 from clipforge.runtime_settings import load_overrides
 from clipforge.security import hash_password
+from clipforge.storage import cleanup_expired_uploads
 
 log = logging.getLogger("clipforge.api")
 
@@ -60,6 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with db.session() as session:
             load_overrides(session, settings)
             _bootstrap_admin(session, settings)
+            cleanup_expired_uploads(settings, session)
         app.state.settings = settings
         app.state.db = db
         log.info("ClipForge web starting (env=%s)", settings.app_env)

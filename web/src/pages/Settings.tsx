@@ -119,6 +119,13 @@ export function SettingsPage() {
                   }}
                 />
               </div>
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <span className="muted">Automated uploads today</span>
+                <span>
+                  {auth.upload_quota.uploads_used} / {auth.upload_quota.uploads_limit} shared · your limit{" "}
+                  {auth.upload_quota.user_uploads_limit}
+                </span>
+              </div>
             </div>
           </div>
 

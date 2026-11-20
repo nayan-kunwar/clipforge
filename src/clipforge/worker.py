@@ -18,6 +18,7 @@ from clipforge.jobs import (
     claim_job,
     emit_event,
     heartbeat,
+    requeue_expired,
     set_status,
 )
 from clipforge.models import Job, OAuthToken, Project, User, utcnow
@@ -143,6 +144,11 @@ def _run_ingest(
         shutil.rmtree(upload_path.parent, ignore_errors=True)
 
     source_bytes = storage.project_size(storage.project_root(settings, project.owner_id, project.id))
+    with db.session() as session:
+        user = session.get(User, project.owner_id)
+        limit = storage.quota_for(user, settings) if user is not None else settings.user_storage_bytes
+    if source_bytes > limit:
+        raise ClipForgeError("Project exceeds the user storage quota")
     _project_status(
         db,
         project.id,
@@ -342,9 +348,14 @@ def run_worker(queue: str = "all", *, once: bool = False) -> None:
     db.create_all()
     with db.session() as session:
         load_overrides(session, settings)
+    with db.session() as session:
+        requeue_expired(session)
+        storage.cleanup_expired_uploads(settings, session)
     kinds = MEDIA_KINDS if queue == "media" else UPLOAD_KINDS if queue == "upload" else MEDIA_KINDS + UPLOAD_KINDS
     log.info("Worker started (queue=%s)", queue)
     while True:
+        with db.session() as session:
+            load_overrides(session, settings)
         claimed = None
         with db.session() as session:
             claimed = claim_job(session, kinds)

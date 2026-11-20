@@ -128,6 +128,15 @@ cp .env.example .env           # edit admin, secrets, domain
 clipforge serve                # web + worker on http://127.0.0.1:8000
 ```
 
+For a local HTTP run, change these values in `.env`:
+
+```dotenv
+CLIPFORGE_PUBLIC_BASE_URL=http://localhost:8000
+CLIPFORGE_DATA_DIR=./data
+CLIPFORGE_SESSION_COOKIE_SECURE=false
+CLIPFORGE_ALLOWED_HOSTS=localhost,127.0.0.1
+```
+
 For UI development, run the API and Vite separately:
 
 ```bash
@@ -143,7 +152,8 @@ media is never exposed through the admin API.
 
 ### Docker Compose + HTTPS
 
-The deployment target is a single VPS behind Caddy:
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the full Hostinger/DNS/Brevo/Google setup.
+The short version:
 
 ```bash
 cp .env.example .env           # set DOMAIN, secrets, Brevo/Google keys, admin
@@ -154,6 +164,15 @@ docker compose logs -f web
 Caddy obtains a Let's Encrypt certificate automatically. Ports 80/443 must be
 reachable, and the domain's A/AAAA records must point at the VPS. Web and worker
 containers share the `clipforge_data` volume.
+
+Backups:
+
+```bash
+./scripts/backup.sh        # SQLite + manifests + env into ./backups
+```
+
+See `scripts/restore.md` for the restore runbook. Media lives on the Docker
+volume; use Hostinger snapshots for full media recovery.
 
 Key limits are configurable through `CLIPFORGE_*` environment variables or the
 admin settings screen: max upload (default 4 GB), max source duration (2 hours),

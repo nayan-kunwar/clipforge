@@ -26,6 +26,7 @@ def make_client(tmp_path: Path) -> tuple[TestClient, Settings]:
         app_env="test",
         default_skip_transcript=True,
         session_cookie_secure=False,
+        allowed_hosts="*",
     )
     return TestClient(create_app(settings)), settings
 
@@ -47,6 +48,7 @@ def test_auth_csrf_and_project_creation(tmp_path) -> None:
         me = client.get("/api/v1/auth/me")
         assert me.status_code == 200
         assert me.json()["user"]["role"] == "admin"
+        assert me.json()["upload_quota"]["uploads_limit"] >= 1
 
         # Mutations require CSRF.
         denied = client.post("/api/v1/projects", json={"youtube_url": "https://youtu.be/abc12345678"})
@@ -215,6 +217,7 @@ def test_upload_limit_is_enforced(tmp_path) -> None:
         admin_initial_password=ADMIN_PASSWORD,
         app_env="test",
         max_upload_bytes=10,
+        allowed_hosts="*",
     )
     client = TestClient(create_app(settings))
     with client:
@@ -225,3 +228,21 @@ def test_upload_limit_is_enforced(tmp_path) -> None:
             headers=csrf_headers(csrf),
         )
         assert response.status_code == 413
+
+
+def test_google_oauth_start_requires_configuration(tmp_path) -> None:
+    settings = Settings(
+        data_dir=tmp_path,
+        admin_email=ADMIN_EMAIL,
+        admin_initial_password=ADMIN_PASSWORD,
+        app_env="test",
+        google_client_id="",
+        google_client_secret="",
+        allowed_hosts="*",
+    )
+    client = TestClient(create_app(settings))
+    with client:
+        login(client)
+        response = client.get("/api/v1/oauth/google/start")
+        assert response.status_code == 400
+        assert "OAuth" in response.json()["detail"]

@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 from clipforge.audio_features import ensure_audio_features
 from clipforge.config import Settings
-from clipforge.models import Project, User, new_id
+from clipforge.models import Project, User, new_id, utcnow
 from clipforge.util import ClipForgeError, WorkDir, probe, read_json, run, write_json
 
 log = logging.getLogger("clipforge.storage")
@@ -69,6 +69,30 @@ def user_storage_used(settings: Settings, user_id: str) -> int:
 
 def quota_for(user: User, settings: Settings) -> int:
     return int(user.quota_bytes or settings.user_storage_bytes)
+
+
+def cleanup_expired_uploads(settings: Settings, db) -> int:
+    """Remove abandoned uploads that were never attached to a project."""
+    from sqlalchemy import select
+
+    from clipforge.models import Upload
+
+    now = utcnow()
+    uploads = db.execute(
+        select(Upload).where(Upload.expires_at.is_not(None), Upload.expires_at < now)
+    ).scalars().all()
+    removed = 0
+    for upload in uploads:
+        used = db.execute(select(Project.id).where(Project.source_ref == upload.id)).first()
+        if used is not None:
+            continue
+        user_id = upload.user_id
+        upload_id = upload.id
+        db.delete(upload)
+        db.commit()
+        shutil.rmtree(upload_root(settings, user_id, upload_id), ignore_errors=True)
+        removed += 1
+    return removed
 
 
 def check_quota(settings: Settings, user: User, additional_bytes: int = 0) -> None:
@@ -352,6 +376,7 @@ def prepare_local_project(
 
 __all__ = [
     "check_quota",
+    "cleanup_expired_uploads",
     "clip_media_path",
     "clip_thumb_path",
     "load_moments",

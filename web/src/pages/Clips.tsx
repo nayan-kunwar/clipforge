@@ -302,7 +302,9 @@ export function ClipsPage() {
                       </button>
                     </div>
                     <div className="hint" style={{ marginTop: 6 }}>
-                      Uploads consume the shared daily YouTube API quota.
+                      {auth?.upload_quota
+                        ? `${auth.upload_quota.uploads_used}/${auth.upload_quota.uploads_limit} shared automated uploads used today.`
+                        : "Uploads consume the shared daily YouTube API quota."}
                     </div>
                   </>
                 ) : (
