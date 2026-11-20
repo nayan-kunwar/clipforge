@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from clipforge.util import (
     ClipForgeError,
@@ -38,13 +38,18 @@ def render_moments(
     src_files: list[dict[str, Any]] | None = None,
     fallback_source: Path | None = None,
     title_seconds: float = TITLE_SECONDS,
+    on_progress: Callable[[int, int, dict[str, Any]], None] | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Render each moment into work/shorts and return per-clip records."""
     work.ensure()
     font_path = find_font(font)
     source_default = fallback_source or _default_source(work)
     records: list[dict[str, Any]] = []
-    for moment in moments:
+    total = len(moments)
+    for index, moment in enumerate(moments, 1):
+        if cancel_check is not None:
+            cancel_check()
         src, ss = _resolve_source(moment, src_files, source_default)
         out = work.shorts / f"{moment['id']}.mp4"
         thumb = work.thumbs / f"{moment['id']}.jpg"
@@ -69,6 +74,8 @@ def render_moments(
         rec["score"] = moment.get("score")
         rec["sources"] = moment.get("sources")
         records.append(rec)
+        if on_progress is not None:
+            on_progress(index, total, rec)
     return records
 
 

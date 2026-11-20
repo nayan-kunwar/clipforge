@@ -255,6 +255,18 @@ class WorkDir:
         return self.base / "highlight_candidates.json"
 
     @property
+    def analysis(self) -> Path:
+        return self.base / "analysis.json"
+
+    @property
+    def waveform(self) -> Path:
+        return self.base / "waveform.json"
+
+    @property
+    def features(self) -> Path:
+        return self.base / "features.npz"
+
+    @property
     def src1080(self) -> Path:
         return self.base / "src1080"
 

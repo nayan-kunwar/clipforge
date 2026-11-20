@@ -21,6 +21,9 @@ Folder layout
   work/<video-id>/
     video360.mp4, audio.m4a, metadata.json, comments.json
     transcript.json      # faster-whisper output (optional)
+    waveform.json        # compact min/max peaks for the web timeline
+    features.npz         # cached per-second audio features
+    analysis.json        # all raw candidates + selected moments
     src1080/             # 1080p source segments for chosen moments
     shorts/              # final rendered Shorts
     thumbs/              # thumbnails
@@ -107,6 +110,15 @@ docker build -t clipforge .
 docker run --rm -v "$PWD:/data" clipforge --help
 ```
 
+## Development
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+The media tests require `ffmpeg` and `ffprobe` on `PATH`; they are skipped otherwise.
+
 ## Usage
 
 Full pipeline on a YouTube URL, at most 8 clips of 60 seconds, with your own timestamps taking priority:
@@ -170,8 +182,10 @@ Notes:
 ```text
 src/clipforge/
   cli.py        Command-line entry (`clipforge` / `python -m clipforge`)
+  pipeline.py   Shared ingest/analyze/render orchestration + job context
   ingest.py     yt-dlp metadata, comments, 360p + sectioned 1080p
   detect.py     Comments, RMS peaks, optional transcript cues, merge/rank
+  audio_features.py  Cached audio features + timeline waveform
   render.py     ffmpeg 1080x1920 Shorts + thumbnails
   manifest.py   CLIPS_MANIFEST.json
   upload.py     YouTube Data API stub (OAuth, Private by default)

@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+from clipforge.audio_features import ensure_audio_features
 from clipforge.util import (
     ClipForgeError,
     WorkDir,
@@ -151,6 +152,7 @@ def _ingest_local(path: Path, work_root: Path, video_id: str | None = None) -> W
         log.info("Copying local file into the work directory (symlink failed)")
         shutil.copy2(path, dest)
     _extract_audio(dest, work.audio)
+    _prepare_audio_features(work, force=True)
     dur = duration_of(dest)
     write_json(
         work.metadata,
@@ -257,7 +259,23 @@ def _download_analysis_media(url: str, work: WorkDir) -> None:
                 produced.replace(work.video360)
     if not work.audio.is_file() or work.audio.stat().st_size < 1000:
         _extract_audio(work.analysis_video(), work.audio)
+    _prepare_audio_features(work)
     log.info("Analysis media ready: %s, %s", work.video360, work.audio)
+
+
+def _prepare_audio_features(work: WorkDir, *, force: bool = False) -> None:
+    """Cache waveform and detection features once the audio track exists."""
+    try:
+        features = ensure_audio_features(work, force=force)
+    except ClipForgeError as exc:
+        log.warning("Audio feature extraction failed: %s", exc)
+        return
+    if features is not None:
+        log.info(
+            "Audio features ready: %.1fs, %d waveform buckets",
+            features.duration_s,
+            len(features.waveform),
+        )
 
 
 def _extract_audio(video: Path, dest: Path) -> None:

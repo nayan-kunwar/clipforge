@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import logging
-import math
 import re
-import subprocess
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 import numpy as np
 
+from clipforge.audio_features import (
+    AudioFeatures,
+    extract_audio_features,
+    load_audio_features,
+)
 from clipforge.util import (
     ClipForgeError,
     WorkDir,
@@ -57,7 +61,6 @@ DEFAULT_KEYWORDS = (
 COMMENT_TS_RE = re.compile(r"(?<![\d:])(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?![\d])")
 
 USER_SCORE = 1000.0
-AUDIO_SR = 8000
 
 
 def detect_moments(
@@ -95,12 +98,13 @@ def detect_moments(
 
     candidates: list[dict[str, Any]] = []
 
+    user_cands: list[dict[str, Any]] = []
     for ts in user_timestamps:
         if ts < 0 or ts >= duration:
             log.warning("Skipping out-of-range timestamp %s (duration %.1fs)", ts, duration)
             continue
         start = min(ts, max(0.0, duration - clip_len))
-        candidates.append(_candidate(
+        user_cands.append(_candidate(
             start=start,
             peak=ts,
             duration=min(clip_len, duration - start),
@@ -108,6 +112,7 @@ def detect_moments(
             source="user",
             why=f"User-provided timestamp {format_timestamp(ts)}",
         ))
+    candidates.extend(user_cands)
 
     comment_cands = parse_comment_timestamps(work.load_comments(), duration, clip_len)
     candidates.extend(comment_cands)
@@ -120,12 +125,14 @@ def detect_moments(
             audio_path,
             clip_len=clip_len,
             ignore_start=ignore_start,
+            features=load_audio_features(work.features),
         )
         candidates.extend(audio_cands)
         log.info("Audio peak windows: %s", len(audio_cands))
     else:
         log.warning("No audio available; skipping loudness analysis")
 
+    transcript_cands: list[dict[str, Any]] = []
     if not skip_transcript:
         try:
             transcript_cands = transcribe_cues(
@@ -154,6 +161,32 @@ def detect_moments(
             "count_requested": count,
             "selected": ranked,
             "raw_candidate_count": len(candidates),
+        },
+    )
+    write_json(
+        work.analysis,
+        {
+            "version": 1,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "duration_s": duration,
+            "options": {
+                "count": count,
+                "max_len": float(max_len),
+                "clip_len": float(clip_len),
+                "min_separation": float(min_separation),
+                "skip_transcript": bool(skip_transcript),
+                "whisper_model": whisper_model,
+                "keywords": list(keywords),
+                "user_timestamps": [float(ts) for ts in user_timestamps],
+                "ignore_start": float(ignore_start),
+            },
+            "candidates": {
+                "user": user_cands,
+                "comments": comment_cands,
+                "audio": audio_cands,
+                "transcript": transcript_cands,
+            },
+            "selected": ranked,
         },
     )
     log.info("Selected %s moment(s)", len(ranked))
@@ -216,9 +249,14 @@ def analyze_audio_peaks(
     clip_len: float,
     ignore_start: float = 0.0,
     ignore_end_pad: float = 30.0,
+    features: AudioFeatures | None = None,
 ) -> list[dict[str, Any]]:
     """Rank highlight windows from 1-second RMS, peak, and transient energy."""
-    rms_db, peak_db, transient = _audio_features(audio_path)
+    if features is None:
+        features = extract_audio_features(audio_path)
+    rms_db = features.rms_db
+    peak_db = features.peak_db
+    transient = features.transient
     n = len(rms_db)
     if n < 3:
         log.warning("Audio is too short for peak analysis (%ss)", n)
@@ -542,54 +580,9 @@ def _expand_window(
 
 
 def _audio_features(audio_path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    cmd = [
-        "ffmpeg",
-        "-hide_banner",
-        "-v",
-        "error",
-        "-i",
-        str(audio_path),
-        "-ac",
-        "1",
-        "-ar",
-        str(AUDIO_SR),
-        "-f",
-        "s16le",
-        "pipe:1",
-    ]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    assert proc.stdout is not None
-    rms_db: list[float] = []
-    peak_db: list[float] = []
-    transient: list[float] = []
-    win = AUDIO_SR  # 1 second
-    buf = b""
-    while True:
-        chunk = proc.stdout.read(win * 2 * 8)
-        if not chunk:
-            break
-        buf += chunk
-        while len(buf) >= win * 2:
-            frame = buf[: win * 2]
-            buf = buf[win * 2 :]
-            samples = np.frombuffer(frame, dtype=np.int16).astype(np.float32) / 32768.0
-            rms = float(np.sqrt(np.mean(samples * samples) + 1e-12))
-            peak = float(np.max(np.abs(samples)) + 1e-12)
-            tr = float(np.mean(np.abs(np.diff(samples)))) if len(samples) > 1 else 0.0
-            rms_db.append(20 * math.log10(rms))
-            peak_db.append(20 * math.log10(peak))
-            transient.append(tr)
-    proc.stdout.close()
-    stderr = proc.stderr.read() if proc.stderr else b""
-    ret = proc.wait()
-    if ret != 0:
-        err = stderr.decode("utf-8", errors="replace")[-500:]
-        raise ClipForgeError(f"ffmpeg audio decode failed: {err}")
-    return (
-        np.array(rms_db, dtype=np.float32),
-        np.array(peak_db, dtype=np.float32),
-        np.array(transient, dtype=np.float32),
-    )
+    """Backward-compatible wrapper around the shared feature extractor."""
+    features = extract_audio_features(audio_path)
+    return features.rms_db, features.peak_db, features.transient
 
 
 def _comment_text(comment: dict[str, Any]) -> str:

@@ -8,9 +8,8 @@ import sys
 from pathlib import Path
 
 from clipforge import __version__
-from clipforge.detect import DEFAULT_KEYWORDS, detect_moments
-from clipforge.ingest import download_segments, ingest, windows_from_moments
-from clipforge.manifest import build_manifest, write_manifest
+from clipforge.pipeline import analyze_project, ingest_project, render_project, run_project
+from clipforge.render import render_clip
 from clipforge.upload import (
     DEFAULT_PRIVACY,
     QUOTA_NOTE,
@@ -21,13 +20,11 @@ from clipforge.util import (
     ClipForgeError,
     WorkDir,
     clamp_clip_duration,
-    is_url,
     parse_timestamp,
     parse_timestamp_list,
     require_bin,
     slugify,
 )
-from clipforge.render import render_clip, render_moments
 
 log = logging.getLogger("clipforge")
 
@@ -166,49 +163,30 @@ def _add_render_args(parser: argparse.ArgumentParser) -> None:
 
 def cmd_run(args: argparse.Namespace) -> int:
     require_bin("ffmpeg")
-    clip_len = clamp_clip_duration(args.max_len)
-    work = ingest(
+    work, _moments, _renders, manifest = run_project(
         args.source,
         Path(args.out),
         video_id=args.video_id,
-        write_comments=not args.no_comments,
-    )
-    moments = detect_moments(
-        work,
         count=args.count,
-        max_len=clip_len,
+        max_len=args.max_len,
         user_timestamps=parse_timestamp_list(args.timestamps),
         keywords=_keywords(args.keywords),
         skip_transcript=args.skip_transcript,
         whisper_model=args.whisper_model,
         min_separation=args.min_separation,
-    )
-    src_files = None
-    meta = work.load_metadata()
-    url = meta.get("webpage_url") or (args.source if is_url(args.source) else "")
-    if url and not args.skip_1080 and moments:
-        try:
-            src_files = download_segments(url, work, windows_from_moments(moments))
-        except ClipForgeError as exc:
-            log.warning("1080p segment download failed, rendering from the analysis file: %s", exc)
-            src_files = None
-    renders = render_moments(
-        work,
-        moments,
+        skip_1080=args.skip_1080,
+        write_comments=not args.no_comments,
         font=args.font,
         fps=args.fps,
         crf=args.crf,
         preset=args.preset,
-        src_files=src_files,
     )
-    manifest = build_manifest(work, moments, renders)
-    write_manifest(work, manifest)
     _print_summary(work, manifest)
     return 0
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
-    work = ingest(
+    work = ingest_project(
         args.source,
         Path(args.out),
         video_id=args.video_id,
@@ -221,7 +199,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 def cmd_detect(args: argparse.Namespace) -> int:
     work = _work_from_path(args.work_dir)
     clip_len = clamp_clip_duration(args.max_len)
-    moments = detect_moments(
+    moments = analyze_project(
         work,
         count=args.count,
         max_len=clip_len,
@@ -250,7 +228,7 @@ def cmd_render(args: argparse.Namespace) -> int:
     moments = data.get("selected") or []
     if not moments:
         raise ClipForgeError("No selected moments in highlight_candidates.json")
-    renders = render_moments(
+    _renders, manifest = render_project(
         work,
         moments,
         font=args.font,
@@ -258,8 +236,6 @@ def cmd_render(args: argparse.Namespace) -> int:
         crf=args.crf,
         preset=args.preset,
     )
-    manifest = build_manifest(work, moments, renders)
-    write_manifest(work, manifest)
     _print_summary(work, manifest)
     return 0
 
