@@ -53,6 +53,7 @@ export interface Project {
   moment_count: number;
   clip_count: number;
   storage_bytes: number;
+  latest_job?: Job | null;
 }
 
 export interface Candidate {

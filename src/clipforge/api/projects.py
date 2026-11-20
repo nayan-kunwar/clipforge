@@ -41,11 +41,14 @@ from clipforge.util import (
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
-def _project_payload(project: Project, settings: Settings, work) -> dict[str, Any]:
+def _project_payload(project: Project, settings: Settings, work, db: Session) -> dict[str, Any]:
     moments = load_moments(work)
     clips = manifest_clips(work)
     preview = work.video360.is_file()
     poster = poster_path(work).is_file()
+    latest_job = db.execute(
+        select(Job).where(Job.project_id == project.id).order_by(Job.created_at.desc()).limit(1)
+    ).scalars().first()
     return {
         "id": project.id,
         "title": project.title,
@@ -62,6 +65,7 @@ def _project_payload(project: Project, settings: Settings, work) -> dict[str, An
         "moment_count": len(moments),
         "clip_count": len(clips),
         "storage_bytes": project_size(project_root(settings, project.owner_id, project.id)),
+        "latest_job": job_payload(latest_job) if latest_job is not None else None,
     }
 
 
@@ -115,7 +119,7 @@ def list_projects(
     items = []
     for project in projects:
         work = workdir_for_project(settings, project)
-        items.append(_project_payload(project, settings, work))
+        items.append(_project_payload(project, settings, work, db))
     return {
         "projects": items,
         "storage": {
@@ -196,7 +200,7 @@ def create_project(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     db.commit()
     work = workdir_for_project(settings, project)
-    return {"project": _project_payload(project, settings, work), "job": job_payload(job)}
+    return {"project": _project_payload(project, settings, work, db), "job": job_payload(job)}
 
 
 @router.get("/{project_id}")
@@ -208,7 +212,7 @@ def get_project(
 ) -> dict:
     project = get_owned_project(project_id, user, db)
     work = workdir_for_project(settings, project)
-    return _project_payload(project, settings, work)
+    return _project_payload(project, settings, work, db)
 
 
 @router.delete("/{project_id}")

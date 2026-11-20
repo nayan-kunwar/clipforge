@@ -234,6 +234,11 @@ export function ProjectPage() {
       </div>
 
       {error ? <div className="error-text" style={{ marginBottom: 12 }}>{error}</div> : null}
+      {project.latest_job?.status === "failed" && project.latest_job.error_detail ? (
+        <div className="error-text" style={{ marginBottom: 12 }}>
+          Last job ({project.latest_job.kind}) failed: {project.latest_job.error_detail}
+        </div>
+      ) : null}
       {notice ? <div className="toast">{notice}</div> : null}
 
       <div className="project-layout">
