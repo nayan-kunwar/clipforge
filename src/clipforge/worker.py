@@ -201,6 +201,12 @@ def _run_render(
     selected = [m for m in moments if (not wanted or str(m.get("id")) in wanted) and m.get("enabled", True)]
     if not selected:
         raise ClipForgeError("No enabled moments to render")
+    with db.session() as session:
+        user = session.get(User, project.owner_id)
+        used = storage.user_storage_used(settings, project.owner_id)
+        limit = storage.quota_for(user, settings) if user is not None else settings.user_storage_bytes
+    if used >= limit:
+        raise ClipForgeError("Storage quota exceeded; delete a project or clear intermediates")
     preset = str(payload.get("preset") or settings.default_ffmpeg_preset)
     if preset not in PRESETS:
         preset = settings.default_ffmpeg_preset

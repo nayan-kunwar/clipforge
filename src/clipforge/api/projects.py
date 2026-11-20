@@ -300,6 +300,32 @@ def get_waveform(
     return FileResponse(work.waveform, media_type="application/json")
 
 
+@router.post("/{project_id}/cleanup")
+def cleanup_project(
+    project_id: str,
+    user: User = Depends(get_current_user),
+    _csrf=Depends(require_csrf),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    project = get_owned_project(project_id, user, db)
+    work = workdir_for_project(settings, project)
+    freed = 0
+    if work.src1080.is_dir():
+        for path in work.src1080.iterdir():
+            if path.is_file():
+                try:
+                    freed += path.stat().st_size
+                    path.unlink()
+                except OSError:
+                    continue
+    transcript_clips = work.base / "transcript_clips"
+    if transcript_clips.is_dir():
+        freed += project_size(transcript_clips)
+        shutil.rmtree(transcript_clips, ignore_errors=True)
+    return {"ok": True, "freed_bytes": freed}
+
+
 @router.post("/{project_id}/analyze")
 def analyze_project(
     project_id: str,

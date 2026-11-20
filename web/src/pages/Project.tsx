@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { api, formatDuration } from "../api";
+import { api, formatBytes, formatDuration } from "../api";
 import { JobPanel } from "../components/JobPanel";
 import { Timeline } from "../components/Timeline";
 import type { Candidate, Job, Moment, Project, Timeline as TimelineData } from "../types";
@@ -229,6 +229,22 @@ export function ProjectPage() {
           )}
           <button className="btn btn-primary" onClick={runRender} disabled={!readyForTimeline || !!activeJobId}>
             Render clips
+          </button>
+          <button
+            className="btn btn-ghost"
+            title="Delete cached 1080p segments and transcript snippets"
+            onClick={async () => {
+              if (!window.confirm("Delete cached intermediates for this project? Renders stay.")) return;
+              try {
+                const response = await api.projects.cleanup(id);
+                notify(`Freed ${formatBytes(response.freed_bytes)}`);
+                await load();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Cleanup failed");
+              }
+            }}
+          >
+            Clear cache
           </button>
         </div>
       </div>

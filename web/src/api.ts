@@ -124,6 +124,8 @@ export const api = {
         method: "POST",
         body: json({ moment_ids: moment_ids || null }),
       }),
+    cleanup: (id: string) =>
+      request<{ ok: boolean; freed_bytes: number }>(`/api/v1/projects/${id}/cleanup`, { method: "POST" }),
     clips: (id: string) => request<{ clips: Clip[] }>(`/api/v1/projects/${id}/clips`),
     manifestUrl: (id: string) => `/api/v1/projects/${id}/manifest`,
   },
