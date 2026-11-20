@@ -1,0 +1,71 @@
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-clipforge.nayankunwar.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CLIPFORGE_DATA_DIR: /data
+    volumes:
+      - clipforge_data:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+
+  worker-media:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "clipforge.worker", "--queue", "media"]
+    env_file: .env
+    environment:
+      CLIPFORGE_DATA_DIR: /data
+    volumes:
+      - clipforge_data:/data
+    healthcheck:
+      disable: true
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+  worker-upload:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "clipforge.worker", "--queue", "upload"]
+    env_file: .env
+    environment:
+      CLIPFORGE_DATA_DIR: /data
+    volumes:
+      - clipforge_data:/data
+    healthcheck:
+      disable: true
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  clipforge_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,23 @@
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# Chunked uploads use 8 MB parts; keep the limit small.
+	request_body {
+		max_size 20MB
+	}
+
+	@sse path /api/v1/jobs/*/events
+	reverse_proxy @sse web:8000 {
+		flush_interval -1
+	}
+	reverse_proxy web:8000
+}

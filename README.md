@@ -100,6 +100,7 @@ pip install -e .
 # Optional extras
 pip install -e ".[transcribe]"   # faster-whisper for transcript cues
 pip install -e ".[upload]"       # YouTube Data API upload
+pip install -e ".[web]"          # FastAPI web UI
 pip install -e ".[all]"
 ```
 
@@ -109,6 +110,67 @@ Or with Docker (core tools only; pass `--build-arg EXTRAS=[all]` for extras):
 docker build -t clipforge .
 docker run --rm -v "$PWD:/data" clipforge --help
 ```
+
+## Web UI (self-hosted)
+
+The React UI is the primary interface: invite-only accounts, private projects,
+waveform timeline with trim handles, render queue, clip metadata, and optional
+per-user YouTube uploads.
+
+### Local development
+
+```bash
+pip install -e ".[web,upload,dev]"
+npm --prefix web install
+npm --prefix web run build     # or: npm --prefix web run dev (Vite on :5173)
+
+cp .env.example .env           # edit admin, secrets, domain
+clipforge serve                # web + worker on http://127.0.0.1:8000
+```
+
+For UI development, run the API and Vite separately:
+
+```bash
+clipforge serve --no-worker    # one terminal
+clipforge worker               # another terminal
+npm --prefix web run dev       # Vite proxies /api to :8000
+```
+
+The first boot creates an admin from `CLIPFORGE_ADMIN_EMAIL` and
+`CLIPFORGE_ADMIN_INITIAL_PASSWORD`. Change the password after signing in.
+Admins can invite users, inspect jobs/usage/errors, and adjust limits. Private
+media is never exposed through the admin API.
+
+### Docker Compose + HTTPS
+
+The deployment target is a single VPS behind Caddy:
+
+```bash
+cp .env.example .env           # set DOMAIN, secrets, Brevo/Google keys, admin
+docker compose up -d --build
+docker compose logs -f web
+```
+
+Caddy obtains a Let's Encrypt certificate automatically. Ports 80/443 must be
+reachable, and the domain's A/AAAA records must point at the VPS. Web and worker
+containers share the `clipforge_data` volume.
+
+Key limits are configurable through `CLIPFORGE_*` environment variables or the
+admin settings screen: max upload (default 4 GB), max source duration (2 hours),
+storage per user (15 GB), and daily YouTube upload caps.
+
+### Google OAuth and email
+
+- Create a Google Cloud **Web application** OAuth client and set the redirect URI
+  to `https://YOUR_DOMAIN/api/v1/oauth/google/callback`.
+- Add `openid`, `email`, and `youtube.upload` scopes. Testing-mode refresh tokens
+  expire after 7 days; verified apps avoid that.
+- Brevo transactional email is used for invites and password resets. Verify the
+  sender domain and add SPF/DKIM/DMARC records. Without `CLIPFORGE_BREVO_API_KEY`,
+  invite/reset links are returned to the admin UI for copy/paste.
+- Automated uploads share the Google Cloud project's YouTube quota (roughly six
+  uploads/day at the default 10,000 units). The UI always offers a manual
+  download + YouTube Studio fallback.
 
 ## Development
 
@@ -188,5 +250,10 @@ src/clipforge/
   audio_features.py  Cached audio features + timeline waveform
   render.py     ffmpeg 1080x1920 Shorts + thumbnails
   manifest.py   CLIPS_MANIFEST.json
-  upload.py     YouTube Data API stub (OAuth, Private by default)
+  upload.py     YouTube Data API upload
+  config.py, db.py, models.py  Web configuration and SQLite models
+  security.py, deps.py, emailer.py, storage.py, jobs.py, quota.py
+  api/          FastAPI routes (auth, projects, uploads, media, jobs, admin)
+  worker.py     Background ingest/analyze/render/upload worker
+web/            React + TypeScript UI (Vite)
 ```
