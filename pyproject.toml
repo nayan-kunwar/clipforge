@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clipforge"
+version = "0.1.0"
+description = "Discover highlight moments, render vertical Shorts, and optionally upload them to YouTube."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Nayan Kunwar" }]
+keywords = ["shorts", "ffmpeg", "youtube", "clips", "highlights"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Multimedia :: Video",
+]
+dependencies = [
+  "yt-dlp>=2024.8.0",
+  "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+transcribe = ["faster-whisper>=1.0.0"]
+upload = [
+  "google-api-python-client>=2.0.0",
+  "google-auth-oauthlib>=1.2.0",
+  "google-auth-httplib2>=0.2.0",
+]
+all = [
+  "faster-whisper>=1.0.0",
+  "google-api-python-client>=2.0.0",
+  "google-auth-oauthlib>=1.2.0",
+  "google-auth-httplib2>=0.2.0",
+]
+
+[project.scripts]
+clipforge = "clipforge.cli:main"
+
+[project.urls]
+Repository = "https://github.com/nayan-kunwar/clipforge"
+
+[tool.setuptools.packages.find]
+where = ["src"]

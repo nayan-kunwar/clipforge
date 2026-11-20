@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+.env.*
+
+# Media and pipeline outputs
+*.mp4
+*.m4a
+*.webm
+*.mkv
+*.avi
+*.mov
+*.zip
+*.wav
+*.aac
+*.mp3
+*.npz
+*.jpg
+*.jpeg
+*.png
+*.webp
+work/
+output/
+workspace/
+shorts/
+thumbs/
+src1080/
+chunks/
+
+# Secrets — never commit these
+client_secret*.json
+token*.json
+*.pem
+credentials.json
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

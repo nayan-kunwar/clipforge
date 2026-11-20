@@ -1,0 +1,11 @@
+# Core pipeline (ingest, audio detection, render, manifest)
+yt-dlp>=2024.8.0
+numpy>=1.26
+
+# Optional: transcript keyword cues
+# faster-whisper>=1.0.0
+
+# Optional: YouTube Data API upload
+# google-api-python-client>=2.0.0
+# google-auth-oauthlib>=1.2.0
+# google-auth-httplib2>=0.2.0
