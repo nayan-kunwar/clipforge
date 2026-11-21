@@ -13,6 +13,7 @@ from typing import Any
 from clipforge import pipeline, storage
 from clipforge.config import Settings
 from clipforge.db import Database
+from clipforge.ingest import download_segments, windows_from_moments
 from clipforge.jobs import (
     cancel_requested,
     claim_job,
@@ -117,6 +118,8 @@ def _run_ingest(
             video_id=work.video_id,
             write_comments=bool((payload.get("options") or {}).get("fetch_comments", True)),
             max_duration_s=settings.max_source_seconds,
+            ytdlp_proxy=settings.ytdlp_proxy or None,
+            ytdlp_cookies_file=settings.ytdlp_cookies_file or None,
             ctx=ctx,
         )
         meta = work.load_metadata()
@@ -211,12 +214,30 @@ def _run_render(
     if preset not in PRESETS:
         preset = settings.default_ffmpeg_preset
     source = storage.source_path_from_metadata(work)
+    src_files = None
+    if source is None:
+        meta = work.load_metadata()
+        url = str(meta.get("webpage_url") or meta.get("url") or "")
+        if url:
+            ctx.info("Downloading 1080p segments")
+            try:
+                src_files = download_segments(
+                    url,
+                    work,
+                    windows_from_moments(selected),
+                    ytdlp_proxy=settings.ytdlp_proxy or None,
+                    ytdlp_cookies_file=settings.ytdlp_cookies_file or None,
+                )
+            except ClipForgeError as exc:
+                ctx.warning("1080p segment download failed; rendering from the analysis copy", error=str(exc))
+                src_files = None
     pipeline.render_project(
         work,
         selected,
         fps=max(15, min(60, int(payload.get("fps") or 30))),
         crf=max(0, min(51, int(payload.get("crf") or 19))),
         preset=preset,
+        src_files=src_files,
         fallback_source=source,
         merge_manifest=bool(wanted),
         ctx=ctx,

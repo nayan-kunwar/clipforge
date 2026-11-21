@@ -17,6 +17,9 @@ YOUTUBE_ID_RE = re.compile(
     r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|live/|shorts/|embed/|v/))([A-Za-z0-9_-]{11})"
 )
 BARE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+_URL_CREDENTIALS_RE = re.compile(
+    r"(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*://)[^/\s:@]+(?::[^/\s@]*)?@"
+)
 
 FONT_CANDIDATES = [
     Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
@@ -114,6 +117,32 @@ def require_bin(name: str) -> str:
     return path
 
 
+def redact_credentials(text: str) -> str:
+    """Hide user:password credentials embedded in URLs."""
+    return _URL_CREDENTIALS_RE.sub(r"\g<scheme><redacted>@", str(text))
+
+
+def redact_command(cmd: list[str]) -> list[str]:
+    """Redact proxy URLs and credentials from a command for logging/errors."""
+    out: list[str] = []
+    hide_next = False
+    for arg in cmd:
+        text = str(arg)
+        if hide_next:
+            out.append("<redacted>")
+            hide_next = False
+            continue
+        if text == "--proxy":
+            out.append(text)
+            hide_next = True
+            continue
+        if text.startswith("--proxy="):
+            out.append("--proxy=<redacted>")
+            continue
+        out.append(redact_credentials(text))
+    return out
+
+
 def run(
     cmd: list[str],
     *,
@@ -121,7 +150,8 @@ def run(
     capture: bool = False,
     cwd: Path | str | None = None,
 ) -> subprocess.CompletedProcess:
-    log.debug("$ %s", " ".join(str(c) for c in cmd))
+    display = redact_command([str(c) for c in cmd])
+    log.debug("$ %s", " ".join(display))
     result = subprocess.run(
         [str(c) for c in cmd],
         check=False,
@@ -132,9 +162,9 @@ def run(
     if check and result.returncode != 0:
         stderr = ""
         if capture:
-            stderr = (result.stderr or result.stdout or "").strip()
+            stderr = redact_credentials((result.stderr or result.stdout or "").strip())
         raise ClipForgeError(
-            f"Command failed ({result.returncode}): {' '.join(str(c) for c in cmd[:8])}"
+            f"Command failed ({result.returncode}): {' '.join(display[:8])}"
             + (f"\n{stderr[-2000:]}" if stderr else "")
         )
     return result

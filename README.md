@@ -190,6 +190,11 @@ storage per user (15 GB), and daily YouTube upload caps.
 - Automated uploads share the Google Cloud project's YouTube quota (roughly six
   uploads/day at the default 10,000 units). The UI always offers a manual
   download + YouTube Studio fallback.
+- If YouTube blocks server-side downloads with a bot check, configure a sticky
+  residential proxy:
+  `CLIPFORGE_YTDLP_PROXY=http://user:pass@host:port`. Only yt-dlp traffic uses
+  it. Optional `CLIPFORGE_YTDLP_COOKIES_FILE` is supported for cookies.txt.
+  See [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Development
 

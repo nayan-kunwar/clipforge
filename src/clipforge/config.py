@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     default_skip_transcript: bool = True
     default_whisper_model: str = "base"
     default_ffmpeg_preset: str = "veryfast"
+    ytdlp_proxy: str = ""
+    ytdlp_cookies_file: str = ""
     media_worker_concurrency: int = 1
     upload_worker_concurrency: int = 2
 

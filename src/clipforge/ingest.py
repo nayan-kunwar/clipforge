@@ -47,6 +47,8 @@ def ingest(
     video_id: str | None = None,
     write_comments: bool = True,
     max_duration_s: float | None = None,
+    ytdlp_proxy: str | None = None,
+    ytdlp_cookies_file: str | None = None,
 ) -> WorkDir:
     """Download or import a source into a standard work directory."""
     require_bin("ffmpeg")
@@ -61,6 +63,8 @@ def ingest(
             video_id=video_id,
             write_comments=write_comments,
             max_duration_s=max_duration_s,
+            ytdlp_proxy=ytdlp_proxy,
+            ytdlp_cookies_file=ytdlp_cookies_file,
         )
     raise ClipForgeError(
         f"Source is not a local file or a recognized URL: {source}"
@@ -74,9 +78,13 @@ def download_segments(
     *,
     pad_before: float = 3.0,
     pad_after: float = 5.0,
+    ytdlp_proxy: str | None = None,
+    ytdlp_cookies_file: str | None = None,
 ) -> list[dict[str, Any]]:
     """Download 1080p only for selected windows using yt-dlp --download-sections."""
     require_bin("yt-dlp")
+    proxy = _normalize_proxy(ytdlp_proxy)
+    cookies = _normalize_cookies_file(ytdlp_cookies_file)
     work.ensure()
     meta = work.load_metadata()
     duration = float(meta.get("duration_s") or 0)
@@ -120,7 +128,7 @@ def download_segments(
         *section_args,
         url,
     ]
-    _yt_dlp_with_fallback(cmd)
+    _yt_dlp_with_fallback(cmd, proxy=proxy, cookies_file=cookies)
     after = _existing_media(work.src1080)
     new_files = [p for p in after if p not in before] or after
     log.info("Downloaded %s 1080p segment(s) into %s", len(new_files), work.src1080)
@@ -189,9 +197,13 @@ def _ingest_url(
     video_id: str | None = None,
     write_comments: bool = True,
     max_duration_s: float | None = None,
+    ytdlp_proxy: str | None = None,
+    ytdlp_cookies_file: str | None = None,
 ) -> WorkDir:
+    proxy = _normalize_proxy(ytdlp_proxy)
+    cookies = _normalize_cookies_file(ytdlp_cookies_file)
     vid = video_id or extract_video_id(url)
-    meta = _fetch_metadata(url, write_comments=write_comments)
+    meta = _fetch_metadata(url, write_comments=write_comments, proxy=proxy, cookies_file=cookies)
     vid = str(meta.get("id") or vid or "video")
     work = WorkDir(work_root, vid).ensure()
     comments = meta.pop("comments", None) or []
@@ -214,11 +226,17 @@ def _ingest_url(
         meta.get("duration_s") or 0,
         len(comments),
     )
-    _download_analysis_media(url, work)
+    _download_analysis_media(url, work, proxy=proxy, cookies_file=cookies)
     return work
 
 
-def _fetch_metadata(url: str, *, write_comments: bool) -> dict[str, Any]:
+def _fetch_metadata(
+    url: str,
+    *,
+    write_comments: bool,
+    proxy: str | None = None,
+    cookies_file: str | None = None,
+) -> dict[str, Any]:
     cmd = ["yt-dlp", "-J", "--no-warnings", "--no-playlist"]
     if write_comments:
         cmd.append("--write-comments")
@@ -226,17 +244,29 @@ def _fetch_metadata(url: str, *, write_comments: bool) -> dict[str, Any]:
     last_error: Exception | None = None
     for client in PLAYER_CLIENTS:
         try:
-            result = _yt_dlp_with_client(cmd, client, capture=True)
+            result = _yt_dlp_with_client(
+                cmd,
+                client,
+                capture=True,
+                proxy=proxy,
+                cookies_file=cookies_file,
+            )
             data = _loads_json(result.stdout)
             if data:
                 return data
         except (ClipForgeError, ValueError) as exc:
             last_error = exc
             log.warning("Metadata fetch failed (%s): %s", client or "default", exc)
-    raise ClipForgeError(f"Could not fetch video metadata: {last_error}")
+    raise _ytdlp_error(last_error)
 
 
-def _download_analysis_media(url: str, work: WorkDir) -> None:
+def _download_analysis_media(
+    url: str,
+    work: WorkDir,
+    *,
+    proxy: str | None = None,
+    cookies_file: str | None = None,
+) -> None:
     if work.video360.is_file() and work.video360.stat().st_size > 1000:
         log.info("Reusing existing analysis video %s", work.video360)
     else:
@@ -252,7 +282,7 @@ def _download_analysis_media(url: str, work: WorkDir) -> None:
             "--no-playlist",
             url,
         ]
-        _yt_dlp_with_fallback(cmd)
+        _yt_dlp_with_fallback(cmd, proxy=proxy, cookies_file=cookies_file)
         produced = _first_existing(
             work.video360,
             *work.base.glob("video360.*"),
@@ -315,16 +345,27 @@ def _extract_audio(video: Path, dest: Path) -> None:
     ])
 
 
-def _yt_dlp_with_fallback(cmd: list[str]) -> None:
+def _yt_dlp_with_fallback(
+    cmd: list[str],
+    *,
+    proxy: str | None = None,
+    cookies_file: str | None = None,
+) -> None:
     last_error: Exception | None = None
     for client in PLAYER_CLIENTS:
         try:
-            _yt_dlp_with_client(cmd, client, capture=True)
+            _yt_dlp_with_client(
+                cmd,
+                client,
+                capture=True,
+                proxy=proxy,
+                cookies_file=cookies_file,
+            )
             return
         except ClipForgeError as exc:
             last_error = exc
             log.warning("yt-dlp failed (%s client): %s", client or "default", exc)
-    raise ClipForgeError(f"yt-dlp failed with all player clients: {last_error}")
+    raise _ytdlp_error(last_error)
 
 
 def _yt_dlp_with_client(
@@ -332,13 +373,54 @@ def _yt_dlp_with_client(
     client: str | None,
     *,
     capture: bool,
+    proxy: str | None = None,
+    cookies_file: str | None = None,
 ):
     full = list(cmd)
+    options: list[str] = []
+    if proxy:
+        options += ["--proxy", proxy]
+    if cookies_file:
+        options += ["--cookies", cookies_file]
+    if options:
+        # Insert before the URL (last argument).
+        full = full[:-1] + options + full[-1:]
     if client:
         # Insert extractor args before the URL (last argument).
         full = full[:-1] + ["--extractor-args", f"youtube:player_client={client}"] + full[-1:]
     log.info("yt-dlp (%s client)", client or "default")
     return run(full, check=True, capture=capture)
+
+
+def _normalize_proxy(proxy: str | None) -> str | None:
+    value = (proxy or "").strip()
+    if not value:
+        return None
+    if not value.lower().startswith(("http://", "https://", "socks4://", "socks5://")):
+        raise ClipForgeError(
+            "YTDLP proxy must start with http://, https://, socks4://, or socks5://"
+        )
+    return value
+
+
+def _normalize_cookies_file(path: str | None) -> str | None:
+    value = (path or "").strip()
+    if not value:
+        return None
+    candidate = Path(value).expanduser()
+    if not candidate.is_file():
+        raise ClipForgeError(f"YouTube cookies file not found: {value}")
+    return str(candidate)
+
+
+def _ytdlp_error(error: Exception | None) -> ClipForgeError:
+    text = str(error or "yt-dlp failed")
+    if "confirm you're not a bot" in text.lower() or "sign in to confirm" in text.lower():
+        return ClipForgeError(
+            "YouTube blocked the server download (bot check). "
+            "Retry with a residential proxy or YouTube cookies, or upload the video file directly."
+        )
+    return ClipForgeError(f"yt-dlp failed with all player clients: {text}")
 
 
 def _coerce_duration(meta: dict[str, Any]) -> float:

@@ -111,6 +111,8 @@ def ingest_project(
     video_id: str | None = None,
     write_comments: bool = True,
     max_duration_s: float | None = None,
+    ytdlp_proxy: str | None = None,
+    ytdlp_cookies_file: str | None = None,
     ctx: JobContext | None = None,
 ) -> WorkDir:
     """Ingest a URL or local file and prepare analysis artifacts."""
@@ -123,6 +125,8 @@ def ingest_project(
         video_id=video_id,
         write_comments=write_comments,
         max_duration_s=max_duration_s,
+        ytdlp_proxy=ytdlp_proxy,
+        ytdlp_cookies_file=ytdlp_cookies_file,
     )
     ctx.check_cancelled()
     ctx.update(0.85, "Preparing audio features")
@@ -239,6 +243,8 @@ def run_project(
     min_separation: float = 90.0,
     skip_1080: bool = False,
     write_comments: bool = True,
+    ytdlp_proxy: str | None = None,
+    ytdlp_cookies_file: str | None = None,
     font: str | None = None,
     fps: int = 30,
     crf: int = 19,
@@ -253,6 +259,8 @@ def run_project(
         Path(out),
         video_id=video_id,
         write_comments=write_comments,
+        ytdlp_proxy=ytdlp_proxy,
+        ytdlp_cookies_file=ytdlp_cookies_file,
         ctx=ctx,
     )
     moments = analyze_project(
@@ -273,7 +281,13 @@ def run_project(
     if url and not skip_1080 and moments:
         ctx.set_stage("download", "Downloading 1080p segments")
         try:
-            src_files = download_segments(url, work, windows_from_moments(moments))
+            src_files = download_segments(
+                url,
+                work,
+                windows_from_moments(moments),
+                ytdlp_proxy=ytdlp_proxy,
+                ytdlp_cookies_file=ytdlp_cookies_file,
+            )
         except ClipForgeError as exc:
             ctx.warning(
                 "1080p segment download failed, rendering from the analysis file",

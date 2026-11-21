@@ -112,6 +112,45 @@ All users share that quota, so the default caps are 5 automated uploads/day
 globally and 2/user/day. Adjust in the admin settings if needed, or request a
 quota extension. Manual uploads do not consume API quota.
 
+## 7b. YouTube bot checks / residential proxy
+
+Datacenter IPs are often challenged by YouTube (“Sign in to confirm you’re not
+a bot”). Route **yt-dlp only** through a sticky residential proxy:
+
+```dotenv
+CLIPFORGE_YTDLP_PROXY=http://user:pass@proxy-host:port
+```
+
+The proxy is applied to metadata, comment, 360p analysis, and 1080p segment
+downloads. It is not used for the UI, Brevo, Google OAuth, or uploads.
+
+Test from the VPS before creating a project:
+
+```bash
+cd /opt/clipforge
+docker compose exec web yt-dlp --proxy "$CLIPFORGE_YTDLP_PROXY" \
+  -J --no-warnings "https://www.youtube.com/watch?v=SHORT_ID"
+```
+
+Use a sticky session so the IP does not change mid-download. Residential proxy
+bandwidth is billed per GB; a 1–2 hour project can move 1–3 GB.
+
+If the proxy still gets blocked, add a Netscape-format cookies file:
+
+```dotenv
+CLIPFORGE_YTDLP_COOKIES_FILE=/data/secrets/youtube-cookies.txt
+```
+
+```bash
+docker compose cp cookies.txt web:/data/secrets/youtube-cookies.txt
+docker compose exec -u root web chown 10001:10001 /data/secrets/youtube-cookies.txt
+docker compose exec -u root web chmod 600 /data/secrets/youtube-cookies.txt
+docker compose up -d
+```
+
+Use a dedicated YouTube account for cookies, never commit the file, and rotate
+it if exposed. The 2-hour source limit still applies; split long VODs.
+
 ## 8. Backups
 
 ```bash

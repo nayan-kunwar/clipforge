@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 import threading
 from pathlib import Path
@@ -94,12 +95,14 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip fetching YouTube comments",
     )
+    _add_ytdlp_args(run_p)
     run_p.set_defaults(func=cmd_run)
 
     ing_p = sub.add_parser("ingest", help="Import a URL or local file into a work directory")
     ing_p.add_argument("source", help="YouTube URL or path to a local video file")
     _add_work_root(ing_p)
     ing_p.add_argument("--no-comments", action="store_true", help="Skip fetching YouTube comments")
+    _add_ytdlp_args(ing_p)
     ing_p.set_defaults(func=cmd_ingest)
 
     det_p = sub.add_parser("detect", help="Find and rank highlight moments in a work directory")
@@ -185,6 +188,19 @@ def _add_render_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--preset", default="medium", help="x264 preset (default: medium)")
 
 
+def _add_ytdlp_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--proxy",
+        default=os.environ.get("CLIPFORGE_YTDLP_PROXY") or None,
+        help="HTTP/SOCKS proxy for yt-dlp only (or CLIPFORGE_YTDLP_PROXY)",
+    )
+    parser.add_argument(
+        "--cookies",
+        default=os.environ.get("CLIPFORGE_YTDLP_COOKIES_FILE") or None,
+        help="Netscape cookies.txt for yt-dlp (or CLIPFORGE_YTDLP_COOKIES_FILE)",
+    )
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     require_bin("ffmpeg")
     work, _moments, _renders, manifest = run_project(
@@ -200,6 +216,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         min_separation=args.min_separation,
         skip_1080=args.skip_1080,
         write_comments=not args.no_comments,
+        ytdlp_proxy=args.proxy,
+        ytdlp_cookies_file=args.cookies,
         font=args.font,
         fps=args.fps,
         crf=args.crf,
@@ -215,6 +233,8 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         Path(args.out),
         video_id=args.video_id,
         write_comments=not args.no_comments,
+        ytdlp_proxy=args.proxy,
+        ytdlp_cookies_file=args.cookies,
     )
     print(f"Work directory: {work.base}")
     return 0

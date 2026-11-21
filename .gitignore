@@ -41,6 +41,7 @@ web/dist/
 caddy_data/
 caddy_config/
 backups/
+secrets/
 
 # Secrets — never commit these
 client_secret*.json
