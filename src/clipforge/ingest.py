@@ -475,6 +475,9 @@ def windows_from_moments(
     windows = []
     for moment in moments:
         start = float(moment["start"])
-        end = start + float(moment["duration"])
-        windows.append((start, end))
+        if moment.get("duration") is not None:
+            duration = float(moment["duration"])
+        else:
+            duration = float(moment.get("end", start)) - start
+        windows.append((start, start + max(0.1, duration)))
     return windows

@@ -5,6 +5,16 @@ from __future__ import annotations
 from clipforge import ingest
 
 
+def test_windows_from_moments_supports_end_only_moments() -> None:
+    windows = ingest.windows_from_moments(
+        [
+            {"id": "a", "start": 10, "end": 25},
+            {"id": "b", "start": 30, "duration": 5},
+        ]
+    )
+    assert windows == [(10.0, 25.0), (30.0, 35.0)]
+
+
 def test_explicit_work_id_wins_over_youtube_id(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         ingest,
