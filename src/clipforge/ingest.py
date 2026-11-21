@@ -204,7 +204,8 @@ def _ingest_url(
     cookies = _normalize_cookies_file(ytdlp_cookies_file)
     vid = video_id or extract_video_id(url)
     meta = _fetch_metadata(url, write_comments=write_comments, proxy=proxy, cookies_file=cookies)
-    vid = str(meta.get("id") or vid or "video")
+    # Explicit work ids (web project ids) must win over the YouTube video id.
+    vid = str(video_id or meta.get("id") or vid or "video")
     work = WorkDir(work_root, vid).ensure()
     comments = meta.pop("comments", None) or []
     meta["video_id"] = vid
